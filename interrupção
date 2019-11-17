@@ -1,0 +1,90 @@
+;****************************** Programa modelo ******************************
+;*******                       Nome do programa                    ***********
+;*****************************************************************************
+
+;*********************  Definição do processador *****************************
+
+	#include p16F877.inc 
+	__config _HS_OSC & _WDT_OFF & _LVP_OFF & _PWRTE_ON 
+
+;************************** Memória de programa ******************************
+ ORG     0 
+
+RESET 
+ nop             
+ goto   START 
+;***************************** Interrupção **********************************
+ ORG 4
+
+;Antes de entrar na interrupção, salva o contexto
+ 
+ MOVWF W_TEMP ;Copy W to TEMP register
+ SWAPF STATUS,W ;Swap status to be saved into W
+ CLRF STATUS ;bank 0, regardless of current bank, Clears IRP,RP1,RP0
+ MOVWF STATUS_TEMP ;Save status to bank zero STATUS_TEMP register
+ MOVF PCLATH, W ;Only required if using pages 1, 2 and/or 3
+ MOVWF PCLATH_TEMP ;Save PCLATH into W
+ CLRF PCLATH ;Page zero, regardless of current page
+
+;Rotina de Interrupção
+
+
+;Recuperando o contexto
+FIM_INTERRUPCAO
+MOVF PCLATH_TEMP, W ;Restore PCLATH
+MOVWF PCLATH ;Move W into PCLATH
+SWAPF STATUS_TEMP,W ;Swap STATUS_TEMP register into W
+;(sets bank to original state)
+MOVWF STATUS ;Move W into STATUS register
+SWAPF W_TEMP,F ;Swap W_TEMP
+SWAPF W_TEMP,W ;Swap W_TEMP into W
+
+ retfie
+;*************************** Inicio do programa ******************************
+
+START 
+
+ bsf     STATUS,RP0  ;vai para o Bank 1
+ movlw   h'00'
+ movwf   OPTION_REG
+;*************************** Declaração de variáveis ******************************   
+ DELAY 	 		EQU 0x20
+ VEZES 	 		EQU 0x21
+;Variaveis usadas para salvar contexto na interrupção
+ W_TEMP	 		EQU 0x22
+ STATUS_TEMP	EQU 0x23
+ PCLATH_TEMP	EQU 0x24
+;Declare suas variáveis aqui, a partir do endereço 0x25
+
+
+
+;*************************** Configurações ******************************
+ movlw   b'00000000' ; Seta PORTA como saída
+ movwf   TRISA       
+ movlw   b'00000000' ; Seta PORTD como saída
+ movwf   TRISD       
+ bcf     STATUS,RP0    ;vai para o Bank 0
+ movlw   h'00'
+ movwf   INTCON
+;*************************** Programa principal ******************************
+
+
+
+
+
+MAIN 
+ ;comandos
+	movlw 0x0f
+	movwf PORTD
+
+
+ goto MAIN 
+ 
+ DELAY_US
+  NOP
+  NOP
+  decfsz DELAY,1         
+  goto DELAY_US        
+  return          
+
+ end
