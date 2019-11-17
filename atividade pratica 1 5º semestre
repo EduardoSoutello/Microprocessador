@@ -1,0 +1,333 @@
+;****************************** Programa modelo ******************************
+;*******                       Nome do programa                    ***********
+;*****************************************************************************
+
+;*********************  Definição do processador *****************************
+
+	#include p16F877.inc 
+	__config _HS_OSC & _WDT_OFF & _LVP_OFF & _PWRTE_ON 
+
+;************************** Memória de programa ******************************
+ ORG     0 
+
+RESET 
+ nop             
+ goto   START 
+;***************************** Interrupção **********************************
+ ORG 4
+;*************************** Declaração de variáveis ******************************   
+ DELAY 	 		EQU 0x20
+ VEZES 	 		EQU 0x21
+ CONT			EQU 0x25 
+;Variaveis usadas para salvar contexto na interrupção
+ W_TEMP	 		EQU 0x22
+ STATUS_TEMP	EQU 0x23
+ PCLATH_TEMP	EQU 0x24
+;Declare suas variáveis aqui, a partir do endereço 0x25
+ DEZENA			EQU 0x26; 
+ UNID			EQU 0x27; 
+ CONTDEZ		EQU 0x28; 
+ TEMPRARIO 		EQU 0x29; 
+ AUX			EQU 0x30; 
+ X1				EQU 0x31; 
+ CONTUNID		EQU 0x32;
+
+;*************************** Configurações ******************************
+ movlw   b'00000000' ; Seta PORTA como saída
+ movwf   TRISA       
+ movlw   b'00000000' ; Seta PORTD como saída
+ movwf   TRISD       
+ movlw	 b'00001111' ; RB0 até RB3 são entrada de dados.
+ movwf	 TRISB  
+ bcf     STATUS,RP0    ;vai para o Bank 0
+ movlw   h'E0'
+ movwf   INTCON	
+
+;*************************** Inicio do programa ******************************
+START 
+
+ bsf     STATUS,RP0  ;vai para o Bank 1
+ movlw   h'07'
+ movwf   OPTION_REG
+
+ MOVWF W_TEMP ;Copy W to TEMPORARIO register
+ SWAPF STATUS,W ;Swap status to be saved into W
+ CLRF STATUS ;bank 0, regardless of current bank, Clears IRP,RP1,RP0
+ MOVWF STATUS_TEMP ;Save status to bank zero STATUS_TEMP register
+ MOVF PCLATH, W ;Only required if using pages 1, 2 and/or 3
+ MOVWF PCLATH_TEMP ;Save PCLATH into W
+ CLRF PCLATH ;Page zero, regardless of current page
+
+	;Rotina de Interrupção
+	btfss INTCON,2
+	goto FIM_INTERRUPCAO
+	bcf INTCON,2
+	INCF CONT
+	MOVLW d'25'
+	SUBWF CONT, 0
+	btfss STATUS,Z
+	goto FIM_INTERRUPCAO
+	;1s
+
+	MOVLW 0x00
+	MOVWF CONT
+
+	MOVLW 0x00 
+	SUBWF X1, W
+	BTFSC STATUS, Z
+	GOTO FIM_INTERRUPCAO
+
+
+INCREMENTO
+
+	MOVLW d'9'  
+	SUBWF CONTUNID, W
+	BTFSC STATUS, Z
+	GOTO ULTIMO
+
+	INCF CONTDEZ
+	MOVF CONTDEZ, W
+	MOVWF AUX
+	call CHECAGEM
+	call UNIDADE 
+	MOVLW d'10'
+	SUBWF CONTDEZ, W
+	BTFSS STATUS, Z
+	goto FIM_INTERRUPCAO
+
+	MOVLW 0x00
+	MOVWF CONTDEZ
+	MOVLW 0x3F
+	MOVWF UNID
+	INCF CONTUNID 
+	MOVF CONTUNID, W
+	MOVWF AUX
+	call CHECAGEM
+	call DEZENA 
+	goto FIM_INTERRUPCAO
+
+ULTIMO
+
+	INCF CONTDEZ
+	MOVF CONTDEZ, W
+	MOVWF AUX
+	call CHECAGEM
+	call UNIDADE 
+	MOVLW d'9' 
+	SUBWF CONTDEZ, W
+	BTFSC STATUS, Z
+	CALL PAUSE
+	goto FIM_INTERRUPCAO
+
+
+	;Recuperando o contexto
+	FIM_INTERRUPCAO
+	MOVF PCLATH_TEMP, W ;Restore PCLATH
+	MOVWF PCLATH ;Move W into PCLATH
+	SWAPF STATUS_TEMP,W ;Swap STATUS_TEMP register into W
+	;(sets bank to original state)
+	MOVWF STATUS ;Move W into STATUS register
+	SWAPF W_TEMP,F ;Swap W_TEMP
+	SWAPF W_TEMP,W ;Swap W_TEMP into W
+ retfie
+
+
+;*************************** Programa principal ******************************
+INICIALIZACAO
+	
+	CLRF PORTD
+	CLRF CONT
+	MOVLW 0x3F
+	MOVWF DEZENA
+	MOVLW 0x3F
+	MOVWF UNID
+	MOVLW 0x00
+	MOVWF CONTDEZ
+	MOVLW 0x00
+	MOVWF CONTUNID
+	MOVLW 0x00
+	MOVWF TEMPORARIO
+	MOVLW 0x00
+	MOVWF AUX
+	MOVLW 0x00
+	MOVWF X1
+
+MAIN 
+	MOVLW b'11101111'; RB4 COM 0, O RESTO TUDO COM 1
+	MOVWF PORTB
+	BTFSS PORTB,0; S1 -> CRESCENTE 
+	goto CRESCENTE
+	BTFSS PORTB,1; S3 -> PAUSE
+	call PAUSE
+	BTFSS PORTB,2; S4 -> RESETA
+	goto RESETA
+
+	call DISPLAY
+
+ goto MAIN 
+
+CRESCENTE
+	MOVLW 0x00
+	SUBWF X1, W
+	BTFSS STATUS, Z
+	GOTO MAIN
+	MOVLW 0x01
+	MOVWF X1
+goto MAIN
+
+PAUSE
+	MOVLW d'0'
+	MOVWF X1
+return
+
+RESETA
+	MOVLW 0x00
+	SUBWF X1, W
+	BTFSS STATUS, Z
+	GOTO MAIN
+	MOVLW 0x3F
+	MOVWF DEZENA
+	MOVLW 0x3F
+	MOVWF UNID
+	MOVLW 0x00
+	MOVWF CONTDEZ
+	MOVLW 0x00
+	MOVWF CONTUNID
+goto MAIN
+
+DISPLAY
+	;Unidade
+	MOVLW b'00010000' 
+	MOVWF PORTA 
+	MOVF UNID, W
+	MOVWF PORTD 
+	call PERDE_TEMPO
+	;Dezena
+	MOVLW b'00100000' 
+	MOVWF PORTA
+	MOVF DEZENA, W
+	movwf PORTD 
+	call PERDE_TEMPO
+return
+
+UNIDADE
+	MOVF TEMPORARIO, W
+	MOVWF UNID
+return
+
+DEZENA
+	MOVF TEMPORARIO, W
+	MOVWF DEZENA
+return
+
+CHECAGEM
+	MOVLW 0x00
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO0	 
+	MOVLW 0x01
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO1
+	MOVLW 0x02
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO2
+	MOVLW 0x03
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO3
+	MOVLW 0x04
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO4
+	MOVLW 0x05
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO5
+	MOVLW 0x06
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO6
+	MOVLW 0x07
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO7
+	MOVLW 0x08
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO8
+	MOVLW 0x09
+	SUBWF AUX, W
+	BTFSC STATUS, Z
+	CALL NUMERO9
+return
+
+NUMERO0
+	MOVLW 0x3F
+	MOVWF TEMPORARIO
+return
+
+NUMERO1
+	MOVLW 0x06
+	MOVWF TEMPORARIO
+return
+
+NUMERO2
+	MOVLW 0x5B
+	MOVWF TEMPORARIO
+return
+
+NUMERO3
+	MOVLW 0x4F
+	MOVWF TEMPORARIO
+return
+
+NUMERO4
+	MOVLW 0x66
+	MOVWF TEMPORARIO
+return
+
+NUMERO5
+	MOVLW 0x6D
+	MOVWF TEMPORARIO
+return
+
+NUMERO6
+	MOVLW 0x7D
+	MOVWF TEMPORARIO
+return
+
+NUMERO7
+	MOVLW 0x07
+	MOVWF TEMPORARIO
+return
+
+NUMERO8
+	MOVLW 0x7F
+	MOVWF TEMPORARIO
+return
+
+NUMERO9
+	MOVLW 0x6F
+	MOVWF TEMPORARIO
+return
+
+PERDE_TEMPO
+ MOVLW d'20'
+ MOVWF VEZES
+VARIAS_VEZES
+ MOVLW d'255'
+ MOVWF DELAY
+ CALL DELAY_US
+ DECFSZ VEZES,1
+ GOTO VARIAS_VEZES
+ RETURN 
+
+DELAY_US
+ NOP
+ NOP
+ DECFSZ DELAY,1
+ GOTO DELAY_US
+ RETURN 
+END
